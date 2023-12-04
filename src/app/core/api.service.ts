@@ -19,20 +19,20 @@ export class ApiService {
       const res = await axios.request<T>(config);
       response = new ApiSuccessResponse(res);
     } catch (error) {
-      console.log(' >>> >>> >>> ApiService.request() caught error: ' + error);
       var error_context = {
         config: config,
-        error: error,
+        error: JSON.stringify(error),
       }
       // TODO: replace with LogService
       console.log(error_context);
 
-      // error may or may not be AxiosError
-      // axios error interface:
-      // https://github.com/axios/axios/blob/b3be36585884ba1e237fdd0eacf55f678aefc396/index.d.ts#L399
       let status_code = 500;
       let error_message: string = 'Request Failed';
       let body = '';
+
+      // error may or may not be AxiosError
+      // axios error interface:
+      // https://github.com/axios/axios/blob/b3be36585884ba1e237fdd0eacf55f678aefc396/index.d.ts#L399
       if (error instanceof AxiosError) {
         if (error['response']) {
           // request succeeded; got response from server
@@ -40,11 +40,20 @@ export class ApiService {
           error_message = error.response.statusText;
           body = error.response.data;
         }
+        else if (error['message']) {
+          error_message = error['message'];
+        }
         else {
           error_message = 'Generic Axios Error'
         }
       }
+      else if (error instanceof Error) {
+        if (error['message']) {
+          error_message = error['message'];
+        }
+      }
 
+      // ApiErrorResponse constructor accepts args corresponding to AxiosError
       response = new ApiErrorResponse({
         status: status_code,
         data: body,

@@ -47,6 +47,6 @@ export class ApiErrorResponse implements ApiResponse {
         this.errorMessage = errorResponse.errorMessage;
         this.body = errorResponse.data;
         this.success = false;
-        this.axiosResponse = errorResponse.errorContext;
+        //this.axiosResponse = errorResponse.errorContext;
     }
 }

@@ -1,10 +1,10 @@
 import { TestBed } from '@angular/core/testing';
 
-import { ApiResponse, ApiSuccessResponse, ApiErrorResponse } from '../shared/interfaces/api-response';
+import { ApiSuccessResponse, ApiErrorResponse } from '../shared/interfaces/api-response';
 import { ApiService } from './api.service';
 import { OkResponse } from '../shared/testing/http';
 
-import axios, { AxiosRequestConfig } from 'axios';
+import axios, { AxiosError, AxiosHeaders, AxiosRequestConfig } from 'axios';
 jest.mock("axios");
 
 describe('ApiService', () => {
@@ -80,4 +80,126 @@ describe('ApiService', () => {
     mockRequest.mockRestore();
   });
 
+  // Test exception handling
+  //
+  //    AxiosError constructor(
+  //        message?: string,
+  //        code?: string,
+  //        config?: InternalAxiosRequestConfig<D>,
+  //        request?: any,
+  //        response?: AxiosResponse<T, D>
+  //    );
+  //
+  //    export interface AxiosResponse<T = any, D = any> {
+  //      data: T;
+  //      status: number;
+  //      statusText: string;
+  //      headers: RawAxiosResponseHeaders | AxiosResponseHeaders;
+  //      config: InternalAxiosRequestConfig<D>;
+  //      request?: any;
+  //    }
+
+  test('catch AxiosError with non-5xx code (400 Bad Request)', async () => {
+    const fakeUrl = 'http://this.is.not.a.real.url';
+    const axiosConfig = {url: fakeUrl, method: 'get', headers: new AxiosHeaders()};
+    const axiosResponse = {
+      status: 400,
+      statusText: 'Bad Request',
+      data: '',
+      headers: new AxiosHeaders(),
+      config: axiosConfig,
+    };
+    const mockRequest = axios.request = jest.fn().mockImplementation(() => {
+      throw new AxiosError('Error', AxiosError.ERR_BAD_REQUEST, axiosConfig, {}, axiosResponse);
+    });
+    const mockConsoleLog = console.log = jest.fn();
+    const svcResp = await service.get(fakeUrl);
+    const expectResponse = new ApiErrorResponse({
+      success: false,
+      status: 400,
+      errorMessage: 'Bad Request',
+      data: '',
+    });
+    // objectContaining() allows ignoring axiosResponse property
+    expect(svcResp).toEqual(expect.objectContaining(expectResponse));
+    // verify expected error was logged
+    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
+    expect(errObject["name"]).toEqual("AxiosError");
+    expect(errObject["code"]).toEqual("ERR_BAD_REQUEST");
+    mockRequest.mockRestore();
+    mockConsoleLog.mockRestore();
+  });
+
+  test('catch AxiosError with 500 server response (eg Internal Server Error)', async () => {
+    const fakeUrl = 'http://this.is.not.a.real.url';
+    const axiosConfig = {url: fakeUrl, method: 'get', headers: new AxiosHeaders()};
+    const axiosResponse = {
+      status: 500,
+      statusText: 'Internal Server Error',
+      data: '',
+      headers: new AxiosHeaders(),
+      config: axiosConfig,
+    };
+    const mockRequest = axios.request = jest.fn().mockImplementation(() => {
+      throw new AxiosError('Error', AxiosError.ERR_BAD_RESPONSE, axiosConfig, {}, axiosResponse);
+    });
+    const mockConsoleLog = console.log = jest.fn();
+    const svcResp = await service.get(fakeUrl);
+    const expectResponse = new ApiErrorResponse({
+      success: false,
+      status: 500,
+      errorMessage: 'Internal Server Error',
+      data: '',
+    });
+    // objectContaining() allows ignoring axiosResponse property
+    expect(svcResp).toEqual(expect.objectContaining(expectResponse));
+    // verify expected error was logged
+    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
+    expect(errObject["name"]).toEqual("AxiosError");
+    expect(errObject["code"]).toEqual("ERR_BAD_RESPONSE");
+    mockRequest.mockRestore();
+    mockConsoleLog.mockRestore();
+  });
+
+  test('catch AxiosError with no server response (eg Network Error)', async () => {
+    const fakeUrl = 'http://this.is.not.a.real.url';
+    const mockRequest = axios.request = jest.fn().mockImplementation(() => {
+      throw new AxiosError('Network Error', AxiosError.ERR_NETWORK);
+    });
+    const mockConsoleLog = console.log = jest.fn();
+    const svcResp = await service.get(fakeUrl);
+    const expectResponse = new ApiErrorResponse({
+      success: false,
+      status: 500,
+      errorMessage: 'Network Error',
+      data: '',
+    });
+    // objectContaining() allows ignoring axiosResponse property
+    expect(svcResp).toEqual(expect.objectContaining(expectResponse));
+    // verify expected error was logged
+    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
+    expect(errObject["name"]).toEqual("AxiosError");
+    expect(errObject["code"]).toEqual("ERR_NETWORK");
+    mockRequest.mockRestore();
+    mockConsoleLog.mockRestore();
+  });
+
+  test('catching a non-AxiosError returns ApiErrorResponse', async () => {
+    const fakeUrl = 'http://this.is.not.a.real.url';
+    //const mockRequest = axios.request = jest.fn().mockRejectedValue(new Error('Unknown Error'));
+    const mockRequest = axios.request = jest.fn().mockImplementation(() => {
+      throw new Error('Unknown Error')
+    });
+    //const mockConsoleLog = console.log = jest.fn();
+    const svcResp = await service.get(fakeUrl);
+    const expectResponse = new ApiErrorResponse({
+      success: false,
+      status: 500,
+      errorMessage: 'Unknown Error',
+      data: '',
+    });
+    // objectContaining() allows ignoring axiosResponse property
+    expect(svcResp).toEqual(expect.objectContaining(expectResponse));
+    mockRequest.mockRestore();
+  });
 });
