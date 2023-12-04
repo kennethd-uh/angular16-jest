@@ -21,16 +21,15 @@ describe('ApiService', () => {
     // initiated by tests in this module will be written to this mock.
     // It is confirmed that mocking console.log here does *not* effect other test modules.
     mockConsoleLog = console.log = jest.fn();
+    // creating a spy on axios.request() with no-op implementation prevents tests from making HTTP requests
     mockAxiosRequest = jest.spyOn(axios, 'request').mockImplementation(async (config: AxiosRequestConfig) => {});
   });
 
   afterEach(() => {
     jest.restoreAllMocks();
-    // jest.restoreMock() & restoreAllMocks() only work on mocks created with
-    // jest.spyOn(); mocks created with jest.fn() or jest.mock() must be
-    // manually restored
+    // jest.restoreMock() & restoreAllMocks() only work on mocks created with jest.spyOn();
+    //  mocks created with jest.fn() or jest.mock() must be manually restored.
     // TODO? restore console.log
-    //console.log = origConsoleLog;
   });
 
   it('should be created', () => {
@@ -39,41 +38,38 @@ describe('ApiService', () => {
 
   test('can mock axios', async () => {
     const mockResp = {data: {body: 'foo'}};
-    axios.get = jest.fn().mockResolvedValue(mockResp)
+    const axiosGetSpy = jest.spyOn(axios, 'get').mockResolvedValue(mockResp)
     const axiosResp = await axios.get('http://this.is.not.a.real.url')
     expect(axiosResp).toEqual(mockResp)
   });
 
   test('can test expected calls on axios mock via service.get', async () => {
     const fakeUrl = 'http://this.is.not.a.real.url';
-    // axiosResponse will be passed to ApiSuccessResponse
     const axiosResponse = {status: 200, data: 'OK'};
     mockAxiosRequest.mockResolvedValue(axiosResponse);
+    // axiosResponse will be passed to ApiSuccessResponse's constructor
     const svcResp = await service.get(fakeUrl);
     expect(svcResp).toEqual(new OkResponse('OK'));
-    // calls is list of lists; our single call is a list of a single item
-    const expectCalls = [[{
-      url: fakeUrl,
-      method: 'get',
-    }]];
+    // calls is list of lists; our single call is a list w/single axiosConfig item
+    const expectCalls = [
+      [{url: fakeUrl, method: 'get'}],
+    ];
     expect(mockAxiosRequest.mock.calls).toEqual(expectCalls);
   });
 
   it('ApiService adds custom headers to AxiosRequestConfig, receives non-default data in response', async () => {
     const fakeUrl = 'http://this.is.not.a.real.url';
-    // axiosResponse will be passed to ApiSuccessResponse
     const axiosResponse = {status: 200, data: 'foo'};
+    // verify custom headers propagate correctly
     const extraHeaders = { 'X-Request-Origin': 'ApiServiceTest' };
     const axiosConfig: AxiosRequestConfig = { headers: extraHeaders };
     mockAxiosRequest.mockResolvedValue(axiosResponse);
     const apiResp = await service.get(fakeUrl, axiosConfig);
+    // OkResponse() can be used for equality comparison with ApiSuccessResponse()
     expect(apiResp).toEqual(new OkResponse('foo'));
-    // calls is list of lists; our single call is a list of a single item
-    const expectCalls = [[{
-      url: fakeUrl,
-      method: 'get',
-      headers: extraHeaders,
-    }]];
+    const expectCalls = [
+      [{url: fakeUrl, method: 'get', headers: extraHeaders}],
+    ];
     expect(mockAxiosRequest.mock.calls).toEqual(expectCalls);
   });
 
@@ -86,12 +82,9 @@ describe('ApiService', () => {
     const apiResp = await service.post(fakeUrl, postData, axiosConfig);
     // service.post() will update axiosConfig & pass as single param to axios.request()
     // axiosConfig object and config found in mockRequest.mock.calls are same instance
-    const expectCalls = [[{
-      url: fakeUrl,
-      method: 'post',
-      data: postData,
-      headers: extraHeaders,
-    }]];
+    const expectCalls = [
+      [{url: fakeUrl, method: 'post', data: postData, headers: extraHeaders}],
+    ];
     expect(mockAxiosRequest.mock.calls).toEqual(expectCalls);
   });
 
