@@ -9,10 +9,28 @@ jest.mock("axios");
 
 describe('ApiService', () => {
   let service: ApiService;
+  let mockConsoleLog: jest.Mock<Function>;
+  // TODO: What type should it be??  https://jestjs.io/docs/mock-function-api#jestspiedsource
+  //let mockAxiosRequest: jest.SpiedFunction<axios.request>;
+  let mockAxiosRequest: any;
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
     service = TestBed.inject(ApiService);
+    // mockConsoleLog will not be restored; all console.log() messages
+    // initiated by tests in this module will be written to this mock.
+    // It is confirmed that mocking console.log here does *not* effect other test modules.
+    mockConsoleLog = console.log = jest.fn();
+    mockAxiosRequest = jest.spyOn(axios, 'request').mockImplementation(async (config: AxiosRequestConfig) => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    // jest.restoreMock() & restoreAllMocks() only work on mocks created with
+    // jest.spyOn(); mocks created with jest.fn() or jest.mock() must be
+    // manually restored
+    // TODO? restore console.log
+    //console.log = origConsoleLog;
   });
 
   it('should be created', () => {
@@ -20,7 +38,7 @@ describe('ApiService', () => {
   });
 
   test('can mock axios', async () => {
-    const mockResp = {data: {body: 'foo'}}
+    const mockResp = {data: {body: 'foo'}};
     axios.get = jest.fn().mockResolvedValue(mockResp)
     const axiosResp = await axios.get('http://this.is.not.a.real.url')
     expect(axiosResp).toEqual(mockResp)
@@ -30,7 +48,7 @@ describe('ApiService', () => {
     const fakeUrl = 'http://this.is.not.a.real.url';
     // axiosResponse will be passed to ApiSuccessResponse
     const axiosResponse = {status: 200, data: 'OK'};
-    const mockRequest = axios.request = jest.fn().mockResolvedValue(axiosResponse);
+    mockAxiosRequest.mockResolvedValue(axiosResponse);
     const svcResp = await service.get(fakeUrl);
     expect(svcResp).toEqual(new OkResponse('OK'));
     // calls is list of lists; our single call is a list of a single item
@@ -38,17 +56,16 @@ describe('ApiService', () => {
       url: fakeUrl,
       method: 'get',
     }]];
-    expect(mockRequest.mock.calls).toEqual(expectCalls);
-    mockRequest.mockRestore();
+    expect(mockAxiosRequest.mock.calls).toEqual(expectCalls);
   });
 
   it('ApiService adds custom headers to AxiosRequestConfig, receives non-default data in response', async () => {
     const fakeUrl = 'http://this.is.not.a.real.url';
     // axiosResponse will be passed to ApiSuccessResponse
     const axiosResponse = {status: 200, data: 'foo'};
-    const mockRequest = axios.request = jest.fn().mockResolvedValue(axiosResponse);
     const extraHeaders = { 'X-Request-Origin': 'ApiServiceTest' };
     const axiosConfig: AxiosRequestConfig = { headers: extraHeaders };
+    mockAxiosRequest.mockResolvedValue(axiosResponse);
     const apiResp = await service.get(fakeUrl, axiosConfig);
     expect(apiResp).toEqual(new OkResponse('foo'));
     // calls is list of lists; our single call is a list of a single item
@@ -57,8 +74,7 @@ describe('ApiService', () => {
       method: 'get',
       headers: extraHeaders,
     }]];
-    expect(mockRequest.mock.calls).toEqual(expectCalls);
-    mockRequest.mockRestore();
+    expect(mockAxiosRequest.mock.calls).toEqual(expectCalls);
   });
 
   it('can use axios mock to verify POST request to ApiService', async () => {
@@ -66,7 +82,7 @@ describe('ApiService', () => {
     const postData = {foo: 'Foo', bar: 'Bar', baz: 'Baz'};
     const extraHeaders = { 'X-Request-Origin': 'ApiServiceTest' };
     const axiosConfig: AxiosRequestConfig = { headers: extraHeaders };
-    const mockRequest = axios.request = jest.fn().mockResolvedValue('ok');
+    mockAxiosRequest.mockResolvedValue('ok');
     const apiResp = await service.post(fakeUrl, postData, axiosConfig);
     // service.post() will update axiosConfig & pass as single param to axios.request()
     // axiosConfig object and config found in mockRequest.mock.calls are same instance
@@ -76,8 +92,7 @@ describe('ApiService', () => {
       data: postData,
       headers: extraHeaders,
     }]];
-    expect(mockRequest.mock.calls).toEqual(expectCalls);
-    mockRequest.mockRestore();
+    expect(mockAxiosRequest.mock.calls).toEqual(expectCalls);
   });
 
   // Test exception handling
@@ -109,16 +124,15 @@ describe('ApiService', () => {
       headers: new AxiosHeaders(),
       config: axiosConfig,
     };
-    const mockRequest = axios.request = jest.fn().mockImplementation(() => {
+    // when ApiService.request() catches this error axiosResponse properties
+    // will be used to instantiate ApiErrorResponse
+    mockAxiosRequest.mockImplementation(() => {
       throw new AxiosError('Error', AxiosError.ERR_BAD_REQUEST, axiosConfig, {}, axiosResponse);
     });
-    const mockConsoleLog = console.log = jest.fn();
     const svcResp = await service.get(fakeUrl);
     const expectResponse = new ApiErrorResponse({
-      success: false,
       status: 400,
       errorMessage: 'Bad Request',
-      data: '',
     });
     // objectContaining() allows ignoring axiosResponse property
     expect(svcResp).toEqual(expect.objectContaining(expectResponse));
@@ -126,8 +140,6 @@ describe('ApiService', () => {
     const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
     expect(errObject["name"]).toEqual("AxiosError");
     expect(errObject["code"]).toEqual("ERR_BAD_REQUEST");
-    mockRequest.mockRestore();
-    mockConsoleLog.mockRestore();
   });
 
   test('catch AxiosError with 500 server response (eg Internal Server Error)', async () => {
@@ -140,10 +152,9 @@ describe('ApiService', () => {
       headers: new AxiosHeaders(),
       config: axiosConfig,
     };
-    const mockRequest = axios.request = jest.fn().mockImplementation(() => {
+    mockAxiosRequest.mockImplementation(() => {
       throw new AxiosError('Error', AxiosError.ERR_BAD_RESPONSE, axiosConfig, {}, axiosResponse);
     });
-    const mockConsoleLog = console.log = jest.fn();
     const svcResp = await service.get(fakeUrl);
     const expectResponse = new ApiErrorResponse({
       success: false,
@@ -157,16 +168,13 @@ describe('ApiService', () => {
     const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
     expect(errObject["name"]).toEqual("AxiosError");
     expect(errObject["code"]).toEqual("ERR_BAD_RESPONSE");
-    mockRequest.mockRestore();
-    mockConsoleLog.mockRestore();
   });
 
   test('catch AxiosError with no server response (eg Network Error)', async () => {
     const fakeUrl = 'http://this.is.not.a.real.url';
-    const mockRequest = axios.request = jest.fn().mockImplementation(() => {
+    mockAxiosRequest.mockImplementation(() => {
       throw new AxiosError('Network Error', AxiosError.ERR_NETWORK);
     });
-    const mockConsoleLog = console.log = jest.fn();
     const svcResp = await service.get(fakeUrl);
     const expectResponse = new ApiErrorResponse({
       success: false,
@@ -180,17 +188,13 @@ describe('ApiService', () => {
     const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
     expect(errObject["name"]).toEqual("AxiosError");
     expect(errObject["code"]).toEqual("ERR_NETWORK");
-    mockRequest.mockRestore();
-    mockConsoleLog.mockRestore();
   });
 
   test('catching a non-AxiosError returns ApiErrorResponse', async () => {
     const fakeUrl = 'http://this.is.not.a.real.url';
-    //const mockRequest = axios.request = jest.fn().mockRejectedValue(new Error('Unknown Error'));
-    const mockRequest = axios.request = jest.fn().mockImplementation(() => {
+    mockAxiosRequest.mockImplementation(() => {
       throw new Error('Unknown Error')
     });
-    //const mockConsoleLog = console.log = jest.fn();
     const svcResp = await service.get(fakeUrl);
     const expectResponse = new ApiErrorResponse({
       success: false,
@@ -198,8 +202,6 @@ describe('ApiService', () => {
       errorMessage: 'Unknown Error',
       data: '',
     });
-    // objectContaining() allows ignoring axiosResponse property
     expect(svcResp).toEqual(expect.objectContaining(expectResponse));
-    mockRequest.mockRestore();
   });
 });

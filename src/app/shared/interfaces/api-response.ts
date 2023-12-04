@@ -45,7 +45,7 @@ export class ApiErrorResponse implements ApiResponse {
     constructor(errorResponse: any) {
         this.statusCode = errorResponse.status;
         this.errorMessage = errorResponse.errorMessage;
-        this.body = errorResponse.data;
+        this.body = errorResponse.data || "";
         this.success = false;
         //this.axiosResponse = errorResponse.errorContext;
     }
