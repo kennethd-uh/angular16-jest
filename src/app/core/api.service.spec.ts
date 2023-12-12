@@ -9,7 +9,6 @@ jest.mock("axios");
 
 describe('ApiService', () => {
   let service: ApiService;
-  let mockConsoleLog: jest.Mock<Function>;
   // TODO: What type should it be??  https://jestjs.io/docs/mock-function-api#jestspiedsource
   //let mockAxiosRequest: jest.SpiedFunction<axios.request>;
   let mockAxiosRequest: any;
@@ -17,19 +16,14 @@ describe('ApiService', () => {
   beforeEach(() => {
     TestBed.configureTestingModule({});
     service = TestBed.inject(ApiService);
-    // mockConsoleLog will not be restored; all console.log() messages
-    // initiated by tests in this module will be written to this mock.
-    // It is confirmed that mocking console.log here does *not* effect other test modules.
-    mockConsoleLog = console.log = jest.fn();
     // creating a spy on axios.request() with no-op implementation prevents tests from making HTTP requests
     mockAxiosRequest = jest.spyOn(axios, 'request').mockImplementation(async (config: AxiosRequestConfig) => {});
   });
 
   afterEach(() => {
-    jest.restoreAllMocks();
     // jest.restoreMock() & restoreAllMocks() only work on mocks created with jest.spyOn();
-    //  mocks created with jest.fn() or jest.mock() must be manually restored.
-    // TODO? restore console.log
+    // mocks created with jest.fn() or jest.mock() must be manually restored.
+    jest.restoreAllMocks();
   });
 
   it('should be created', () => {
@@ -130,9 +124,9 @@ describe('ApiService', () => {
     // objectContaining() allows ignoring axiosResponse property
     expect(svcResp).toEqual(expect.objectContaining(expectResponse));
     // verify expected error was logged
-    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
-    expect(errObject["name"]).toEqual("AxiosError");
-    expect(errObject["code"]).toEqual("ERR_BAD_REQUEST");
+//    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
+//    expect(errObject["name"]).toEqual("AxiosError");
+//    expect(errObject["code"]).toEqual("ERR_BAD_REQUEST");
   });
 
   test('catch AxiosError with 500 server response (eg Internal Server Error)', async () => {
@@ -158,9 +152,9 @@ describe('ApiService', () => {
     // objectContaining() allows ignoring axiosResponse property
     expect(svcResp).toEqual(expect.objectContaining(expectResponse));
     // verify expected error was logged
-    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
-    expect(errObject["name"]).toEqual("AxiosError");
-    expect(errObject["code"]).toEqual("ERR_BAD_RESPONSE");
+//    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
+//    expect(errObject["name"]).toEqual("AxiosError");
+//    expect(errObject["code"]).toEqual("ERR_BAD_RESPONSE");
   });
 
   test('catch AxiosError with no server response (eg Network Error)', async () => {
@@ -178,9 +172,9 @@ describe('ApiService', () => {
     // objectContaining() allows ignoring axiosResponse property
     expect(svcResp).toEqual(expect.objectContaining(expectResponse));
     // verify expected error was logged
-    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
-    expect(errObject["name"]).toEqual("AxiosError");
-    expect(errObject["code"]).toEqual("ERR_NETWORK");
+//    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
+//    expect(errObject["name"]).toEqual("AxiosError");
+//    expect(errObject["code"]).toEqual("ERR_NETWORK");
   });
 
   test('catching a non-AxiosError returns ApiErrorResponse', async () => {

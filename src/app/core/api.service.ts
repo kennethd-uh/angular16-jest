@@ -23,8 +23,6 @@ export class ApiService {
         config: config,
         error: JSON.stringify(error),
       }
-      // TODO: replace with LogService
-      console.log(error_context);
 
       let status_code = 500;
       let error_message: string = 'Request Failed';
