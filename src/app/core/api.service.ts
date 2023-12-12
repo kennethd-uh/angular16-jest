@@ -66,7 +66,7 @@ export class ApiService {
     config = config ? config : {};
     config['url'] = url;
     config['method'] = 'get';
-    return await this.request<T>(config);
+    return this.request<T>(config);
   }
 
   async post<T>(url: string, data: any, config?: AxiosRequestConfig) {
@@ -74,6 +74,6 @@ export class ApiService {
     config['url'] = url;
     config['method'] = 'post';
     config['data'] = data;
-    return await this.request<T>(config);
+    return this.request<T>(config);
   }
 }
