@@ -3,27 +3,26 @@ import { Injectable } from '@angular/core';
 import axios, { AxiosError, AxiosRequestConfig } from 'axios';
 
 import { ApiResponse, ApiSuccessResponse, ApiErrorResponse } from '../shared/interfaces/api-response';
+import { LogService } from "./log.service";
 
 @Injectable({
   providedIn: 'root'
 })
 export class ApiService {
-  constructor() { }
+  constructor(private logger: LogService) { }
 
   // mirror axios pattern of a single request() method, with HTTP verb-specific
   // helpers that only provide contextual awareness to prepare config
   async request<T>(config: AxiosRequestConfig) {
     let response: ApiResponse;
 
+    await this.logger.debug('ApiService.request: ' + config['url']);
     try {
       const res = await axios.request<T>(config);
       response = new ApiSuccessResponse(res);
+      await this.logger.debug(response);
     } catch (error) {
-      var error_context = {
-        config: config,
-        error: JSON.stringify(error),
-      }
-
+      // default, generic error
       let status_code = 500;
       let error_message: string = 'Request Failed';
       let body = '';
@@ -50,6 +49,9 @@ export class ApiService {
           error_message = error['message'];
         }
       }
+
+      var error_context = {config: config, error: error}
+      await this.logger.error(error_context);
 
       // ApiErrorResponse constructor accepts args corresponding to AxiosError
       response = new ApiErrorResponse({

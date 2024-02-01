@@ -2,6 +2,12 @@ import { TestBed } from '@angular/core/testing';
 
 import { ApiSuccessResponse, ApiErrorResponse } from '../shared/interfaces/api-response';
 import { ApiService } from './api.service';
+import { ConsoleLogHandler, Severity } from './log.service';
+import {
+  expectSuccessfulApiRequestLog,
+  expectApiRequestErrorLog,
+  expectLastLogMessageMatches
+} from 'src/app/shared/testing/logging';
 import { OkResponse } from '../shared/testing/http';
 
 import axios, { AxiosError, AxiosHeaders, AxiosRequestConfig } from 'axios';
@@ -12,12 +18,17 @@ describe('ApiService', () => {
   // TODO: What type should it be??  https://jestjs.io/docs/mock-function-api#jestspiedsource
   //let mockAxiosRequest: jest.SpiedFunction<axios.request>;
   let mockAxiosRequest: any;
+  let mockConsoleLog: any;
 
   beforeEach(() => {
     TestBed.configureTestingModule({});
     service = TestBed.inject(ApiService);
     // creating a spy on axios.request() with no-op implementation prevents tests from making HTTP requests
-    mockAxiosRequest = jest.spyOn(axios, 'request').mockImplementation(async (config: AxiosRequestConfig) => {});
+    mockAxiosRequest = jest.spyOn(axios, 'request')
+                           .mockImplementation(async (config: AxiosRequestConfig) => {});
+    // mock ConsoleLogHandler.log() to collect but not display logged messages
+    mockConsoleLog = jest.spyOn(ConsoleLogHandler.prototype, 'log')
+                         .mockImplementation(async(datestr: string, severity: Severity, msg: any) => {});
   });
 
   afterEach(() => {
@@ -49,6 +60,8 @@ describe('ApiService', () => {
       [{url: fakeUrl, method: 'get'}],
     ];
     expect(mockAxiosRequest.mock.calls).toEqual(expectCalls);
+
+    expectSuccessfulApiRequestLog(mockConsoleLog, fakeUrl);
   });
 
   it('ApiService adds custom headers to AxiosRequestConfig, receives non-default data in response', async () => {
@@ -65,6 +78,8 @@ describe('ApiService', () => {
       [{url: fakeUrl, method: 'get', headers: extraHeaders}],
     ];
     expect(mockAxiosRequest.mock.calls).toEqual(expectCalls);
+
+    expectSuccessfulApiRequestLog(mockConsoleLog, fakeUrl);
   });
 
   it('can use axios mock to verify POST request to ApiService', async () => {
@@ -72,7 +87,8 @@ describe('ApiService', () => {
     const postData = {foo: 'Foo', bar: 'Bar', baz: 'Baz'};
     const extraHeaders = { 'X-Request-Origin': 'ApiServiceTest' };
     const axiosConfig: AxiosRequestConfig = { headers: extraHeaders };
-    mockAxiosRequest.mockResolvedValue('ok');
+    const axiosResponse = {status: 200, data: 'foo'};
+    mockAxiosRequest.mockResolvedValue(axiosResponse);
     const apiResp = await service.post(fakeUrl, postData, axiosConfig);
     // service.post() will update axiosConfig & pass as single param to axios.request()
     // axiosConfig object and config found in mockRequest.mock.calls are same instance
@@ -80,6 +96,8 @@ describe('ApiService', () => {
       [{url: fakeUrl, method: 'post', data: postData, headers: extraHeaders}],
     ];
     expect(mockAxiosRequest.mock.calls).toEqual(expectCalls);
+
+    expectSuccessfulApiRequestLog(mockConsoleLog, fakeUrl);
   });
 
   // Test exception handling
@@ -123,10 +141,15 @@ describe('ApiService', () => {
     });
     // objectContaining() allows ignoring axiosResponse property
     expect(svcResp).toEqual(expect.objectContaining(expectResponse));
-    // verify expected error was logged
-//    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
-//    expect(errObject["name"]).toEqual("AxiosError");
-//    expect(errObject["code"]).toEqual("ERR_BAD_REQUEST");
+
+    const expectAxiosError = {
+      code: AxiosError.ERR_BAD_REQUEST,
+    }
+    const expectAxiosResponse = {
+      status: 400,
+      statusText: 'Bad Request',
+    }
+    expectApiRequestErrorLog(mockConsoleLog, fakeUrl, expectAxiosError, expectAxiosResponse);
   });
 
   test('catch AxiosError with 500 server response (eg Internal Server Error)', async () => {
@@ -151,10 +174,15 @@ describe('ApiService', () => {
     });
     // objectContaining() allows ignoring axiosResponse property
     expect(svcResp).toEqual(expect.objectContaining(expectResponse));
-    // verify expected error was logged
-//    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
-//    expect(errObject["name"]).toEqual("AxiosError");
-//    expect(errObject["code"]).toEqual("ERR_BAD_RESPONSE");
+
+    const expectAxiosError = {
+      code: AxiosError.ERR_BAD_RESPONSE,
+    }
+    const expectAxiosResponse = {
+      status: 500,
+      statusText: 'Internal Server Error',
+    }
+    expectApiRequestErrorLog(mockConsoleLog, fakeUrl, expectAxiosError, expectAxiosResponse);
   });
 
   test('catch AxiosError with no server response (eg Network Error)', async () => {
@@ -171,10 +199,12 @@ describe('ApiService', () => {
     });
     // objectContaining() allows ignoring axiosResponse property
     expect(svcResp).toEqual(expect.objectContaining(expectResponse));
-    // verify expected error was logged
-//    const errObject = JSON.parse(mockConsoleLog.mock.calls[0][0]["error"]);
-//    expect(errObject["name"]).toEqual("AxiosError");
-//    expect(errObject["code"]).toEqual("ERR_NETWORK");
+
+    const expectAxiosError = {
+      code: AxiosError.ERR_NETWORK,
+      message: 'Network Error',
+    }
+    expectApiRequestErrorLog(mockConsoleLog, fakeUrl, expectAxiosError);
   });
 
   test('catching a non-AxiosError returns ApiErrorResponse', async () => {
@@ -190,5 +220,17 @@ describe('ApiService', () => {
       data: '',
     });
     expect(svcResp).toEqual(expect.objectContaining(expectResponse));
+
+    // assert we have both a DEBUG & ERROR message; assert nothing about the error
+    expectApiRequestErrorLog(mockConsoleLog, fakeUrl);
+    // console.log
+    //   2024-01-31T12:43:02.657Z ERROR {
+    //     config: { url: 'http://this.is.not.a.real.url', method: 'get' },
+    //     error: Error: Unknown Error
+    //         at Function.<anonymous> (.../dist/test-out/src/app/core/api.service.spec.ts:322:13)
+    //         ...
+    //   }
+    expectLastLogMessageMatches(mockConsoleLog, Severity.ERROR, 'Unknown Error');
   });
+
 });
