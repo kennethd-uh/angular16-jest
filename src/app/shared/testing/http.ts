@@ -25,3 +25,8 @@ export const unauthorizedResponse = new ApiErrorResponse({
     status: 403,
     errorMessage: 'Not permitted for resource',
 });
+
+export const serverErrorResponse = new ApiErrorResponse({
+    status: 500,
+    errorMessage: 'Internal Server Error',
+});
